@@ -4,7 +4,9 @@ import os
 DB_PATH = os.getenv("DB_PATH", "bot_database.db")
 
 def get_connection():
-    return sqlite3.connect(DB_PATH, row_factory=sqlite3.Row)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row   # ✅ Set row_factory after connection
+    return conn
 
 def init_db():
     conn = get_connection()
