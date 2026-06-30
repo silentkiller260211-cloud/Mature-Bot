@@ -106,8 +106,9 @@ class Utility(commands.Cog):
         embed.set_footer(text=f"Server: {guild.name}")
         await interaction.response.send_message(embed=embed)
 
+    # ✅ FIXED: Renamed from bot_stats to botstat (no "bot_" prefix)
     @app_commands.command(name="bot_stats", description="Show bot statistics")
-    async def bot_stats(self, interaction: discord.Interaction):
+    async def botstat(self, interaction: discord.Interaction):
         bot = self.bot
         total_servers = len(bot.guilds)
         total_users = sum(g.member_count for g in bot.guilds)
