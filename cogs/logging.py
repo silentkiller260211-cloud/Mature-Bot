@@ -11,8 +11,7 @@ class Logging(commands.Cog):
     @app_commands.command(name="logging_autosetup", description="Automatically set up logging channels")
     @app_commands.default_permissions(administrator=True)
     async def logging_autosetup(self, interaction: discord.Interaction):
-        # ✅ Defer to avoid timeout
-        await interaction.response.defer()
+        await interaction.response.defer()   # ✅ PREVENT TIMEOUT
 
         category = discord.utils.get(interaction.guild.categories, name="📊 Logs")
         if not category:
@@ -43,11 +42,10 @@ class Logging(commands.Cog):
 
         embed = discord.Embed(
             title="✅ Logging Setup Complete",
-            description="All logging channels have been created and configured.",
+            description="All logging channels created and configured.",
             color=discord.Color.green()
         )
-        # ✅ Send followup instead of direct response
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed)   # ✅ SEND AFTER WORK
 
     @app_commands.command(name="logging_enable", description="Enable logging")
     @app_commands.default_permissions(administrator=True)
@@ -62,7 +60,6 @@ class Logging(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
-        # Enable logging (update status if needed – for simplicity, we just confirm)
         embed = discord.Embed(
             title="✅ Logging Enabled",
             description="All logging channels are now active.",
@@ -83,7 +80,6 @@ class Logging(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
-        # Disable (clear or mark inactive)
         db.execute_query("UPDATE guild_settings SET log_channels = '{}' WHERE guild_id = ?", (interaction.guild.id,))
         embed = discord.Embed(
             title="✅ Logging Disabled",
