@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: mature-bot
-    runtime: python
-    buildCommand: ./build.sh
-    startCommand: python mature.py
