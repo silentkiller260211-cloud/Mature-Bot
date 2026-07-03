@@ -5,6 +5,7 @@ DB_PATH = "mature_bot.db"
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
+        # Economy Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS economy (
                 user_id INTEGER, guild_id INTEGER, balance INTEGER DEFAULT 0, 
@@ -12,18 +13,31 @@ async def init_db():
                 PRIMARY KEY (user_id, guild_id)
             )
         """)
+        
+        # Premium Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS premium (
                 guild_id INTEGER PRIMARY KEY, tier TEXT DEFAULT 'none', 
                 expires_at TEXT
             )
         """)
+        
+        # No-Prefix Users Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS no_prefix_users (
                 guild_id INTEGER, user_id INTEGER, 
                 PRIMARY KEY (guild_id, user_id)
             )
         """)
+        
+        # Antinuke Settings Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS antinuke_settings (
+                guild_id INTEGER, program TEXT, enabled BOOLEAN DEFAULT 0, 
+                PRIMARY KEY (guild_id, program)
+            )
+        """)
+        
         await db.commit()
     print("✅ Database initialized successfully.")
 
