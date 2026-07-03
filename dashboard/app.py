@@ -2,35 +2,58 @@ from flask import Flask, request, jsonify, session, redirect, make_response
 import requests
 import os
 import discord
+import aiosqlite
+import asyncio
 from datetime import datetime
+from functools import wraps
 
 app = Flask(__name__)
-# CRITICAL: Hardcoded secret key to prevent login loops
-app.secret_key = "MATURE_BOT_NATIVE_APP_KEY_9876543210" 
+app.secret_key = "MATURE_BOT_PRO_DASHBOARD_2026_SECURE"
 
 bot_instance = None
 DEVELOPER_USER_ID = int(os.getenv("DEVELOPER_USER_ID", "0"))
-CLIENT_ID = os.getenv("CLIENT_ID", "YOUR_CLIENT_ID_HERE") 
+CLIENT_ID = os.getenv("CLIENT_ID", "YOUR_CLIENT_ID_HERE")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET", "YOUR_CLIENT_SECRET_HERE")
 REDIRECT_URI = os.getenv("REDIRECT_URI", "https://mature-bot.onrender.com/callback")
 
 DISCORD_API = "https://discord.com/api/v10"
 INVITE_URL = f"https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&permissions=8&scope=bot%20applications.commands"
+DB_PATH = "mature_bot.db"
 
 def is_developer(user_id):
     return int(user_id) == DEVELOPER_USER_ID
 
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return jsonify({"error": "Not logged in"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
 @app.route('/manifest.json')
 def manifest():
     manifest_data = {
-        "name": "Mature Bot Dashboard", "short_name": "Mature Bot",
-        "start_url": "/", "display": "standalone", "background_color": "#09090b",
-        "theme_color": "#6366f1", "orientation": "portrait",
+        "name": "Mature Bot Dashboard",
+        "short_name": "Mature Bot",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0f0f23",
+        "theme_color": "#6366f1",
+        "orientation": "portrait",
         "icons": [{"src": "https://cdn.discordapp.com/emojis/1092835073522409522.png", "sizes": "192x192", "type": "image/png"}]
     }
     response = make_response(jsonify(manifest_data))
     response.headers['Content-Type'] = 'application/manifest+json'
     return response
+
+def run_async(coro):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
@@ -41,86 +64,181 @@ DASHBOARD_TEMPLATE = """
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#09090b">
+    <meta name="theme-color" content="#0f0f23">
     <link rel="manifest" href="/manifest.json">
     <title>Mature Bot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         [x-cloak] { display: none !important; }
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #09090b; color: #f8fafc; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
-        input, textarea { user-select: text; -webkit-user-select: text; }
-        .g-box { background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; transition: transform 0.1s ease; }
-        .g-box:active { transform: scale(0.98); }
-        .grad-setup { background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.15)); border-color: rgba(16, 185, 129, 0.3); }
-        .text-grad { background: linear-gradient(to right, #818cf8, #c084fc, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .btn-glow { background: linear-gradient(135deg, #6366f1, #8b5cf6); transition: all 0.2s; }
-        .btn-glow:active { transform: scale(0.95); box-shadow: 0 0 15px rgba(99, 102, 241, 0.6); }
-        .bottom-nav { background: rgba(9, 9, 11, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
-        .top-header { padding-top: max(0.75rem, env(safe-area-inset-top)); background: rgba(9, 9, 11, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-        .toast-enter { transform: translateY(100%); opacity: 0; }
-        .toast-enter-active { transform: translateY(0); opacity: 1; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .toast-leave { transform: translateY(0); opacity: 1; }
-        .toast-leave-active { transform: translateY(100%); opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%); color: #e2e8f0; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; }
+        .gradient-text { background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .btn-primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); transition: all 0.3s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4); }
+        .btn-primary:active { transform: scale(0.95); }
+        .category-menu { position: fixed; top: 0; left: -320px; width: 320px; height: 100vh; background: rgba(15, 15, 35, 0.98); backdrop-filter: blur(20px); z-index: 100; transition: left 0.3s ease; overflow-y: auto; }
+        .category-menu.open { left: 0; }
+        .category-item { padding: 12px 20px; margin: 4px 12px; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+        .category-item:hover { background: rgba(99, 102, 241, 0.2); }
+        .category-item.active { background: rgba(99, 102, 241, 0.3); border-left: 3px solid #6366f1; }
+        .submenu { margin-left: 20px; margin-top: 8px; }
+        .submenu-item { padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .submenu-item:hover { background: rgba(255, 255, 255, 0.05); }
+        .toggle-switch { width: 48px; height: 24px; background: #374151; border-radius: 12px; cursor: pointer; position: relative; transition: background 0.3s; }
+        .toggle-switch.active { background: linear-gradient(135deg, #10b981, #059669); }
+        .toggle-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.3s; }
+        .toggle-switch.active::after { transform: translateX(24px); }
+        .overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 99; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .overlay.show { opacity: 1; pointer-events: auto; }
+        .bottom-nav { background: rgba(15, 15, 35, 0.95); backdrop-filter: blur(20px); border-top: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+        .top-header { padding-top: max(0.75rem, env(safe-area-inset-top)); background: rgba(15, 15, 35, 0.9); backdrop-filter: blur(12px); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .config-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .status-online { background: rgba(16, 185, 129, 0.2); color: #10b981; }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden" x-data="appData()" x-cloak>
 
-    <div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-[90%] max-w-sm pointer-events-none">
+    <div class="overlay" :class="showMenu ? 'show' : ''" @click="showMenu = false"></div>
+
+    <div class="category-menu" :class="showMenu ? 'open' : ''">
+        <div class="p-6 border-b border-white/10">
+            <div class="flex items-center justify-between">
+                <h2 class="text-xl font-bold text-white">Categories</h2>
+                <button @click="showMenu = false" class="text-slate-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+        </div>
+        <div class="p-4 space-y-2">
+            <template x-for="cat in categories" :key="cat.id">
+                <div>
+                    <div class="category-item flex items-center justify-between" :class="activeCategory === cat.id ? 'active' : ''" @click="toggleCategory(cat.id)">
+                        <div class="flex items-center gap-3">
+                            <i :class="cat.icon" class="text-lg" :class="cat.color"></i>
+                            <span class="font-medium" x-text="cat.name"></span>
+                        </div>
+                        <i class="fas fa-chevron-down text-sm transition-transform" :class="expandedCategory === cat.id ? 'rotate-180' : ''"></i>
+                    </div>
+                    <div x-show="expandedCategory === cat.id" class="submenu space-y-1" x-transition>
+                        <template x-for="cmd in cat.commands" :key="cmd.name">
+                            <div class="submenu-item flex items-center justify-between text-slate-300 hover:text-white" @click="executeCommand(cmd.name)">
+                                <div class="flex items-center gap-2">
+                                    <i :class="cmd.icon" class="text-sm w-5"></i>
+                                    <span x-text="cmd.label"></span>
+                                </div>
+                                <i class="fas fa-chevron-right text-xs text-slate-600"></i>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[110] flex flex-col gap-2 w-[90%] max-w-sm pointer-events-none">
         <template x-for="toast in toasts" :key="toast.id">
-            <div x-show="toast.show" x-transition:enter="toast-enter" x-transition:enter-start="toast-enter" x-transition:enter-end="toast-enter-active" x-transition:leave="toast-leave" x-transition:leave-start="toast-leave" x-transition:leave-end="toast-leave-active" class="g-box p-4 rounded-2xl flex items-center gap-3 shadow-2xl pointer-events-auto border-l-4" :class="toast.type === 'success' ? 'border-emerald-500' : 'border-red-500'">
+            <div x-show="toast.show" x-transition class="glass p-4 rounded-2xl flex items-center gap-3 shadow-2xl pointer-events-auto border-l-4" :class="toast.type === 'success' ? 'border-emerald-500' : 'border-red-500'">
                 <i class="fas" :class="toast.type === 'success' ? 'fa-check-circle text-emerald-400' : 'fa-times-circle text-red-400'"></i>
                 <p class="text-sm font-medium text-white flex-1" x-text="toast.msg"></p>
             </div>
         </template>
     </div>
 
-    <div x-show="loading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#09090b]">
-        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-3xl shadow-lg shadow-indigo-500/30 animate-pulse mb-4">🧠</div>
-        <p class="text-slate-400 font-medium animate-pulse">Loading App...</p>
+    <div x-show="loading" class="fixed inset-0 z-50 flex flex-col items-center justify-center">
+        <div class="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-4xl shadow-2xl mb-4 animate-pulse">🧠</div>
+        <p class="text-slate-400 font-medium">Loading Mature Bot...</p>
     </div>
 
-    <div x-show="!loading && !isLoggedIn" class="fixed inset-0 z-40 flex flex-col items-center justify-center p-6 bg-[#09090b]">
-        <div class="text-center w-full max-w-sm">
-            <div class="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-4xl shadow-2xl shadow-indigo-500/30 mx-auto mb-6"></div>
-            <h1 class="text-3xl font-bold text-white mb-2">Mature Bot</h1>
-            <p class="text-slate-400 mb-8">The Ultimate Discord Platform</p>
-            <a href="/login" class="btn-glow w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-3 shadow-lg shadow-indigo-500/20">
+    <div x-show="!loading && !isLoggedIn" class="fixed inset-0 z-40 flex flex-col items-center justify-center p-6">
+        <div class="text-center w-full max-w-md">
+            <div class="w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-5xl shadow-2xl mx-auto mb-6">🧠</div>
+            <h1 class="text-4xl font-bold gradient-text mb-3">Mature Bot</h1>
+            <p class="text-slate-400 mb-8">The Ultimate Discord Management Platform</p>
+            <a href="/login" class="btn-primary w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-3 shadow-lg">
                 <i class="fab fa-discord text-2xl"></i> Login with Discord
             </a>
         </div>
     </div>
 
     <div x-show="!loading && isLoggedIn" class="flex-1 flex flex-col h-full relative overflow-hidden">
-        <header class="top-header px-4 py-3 flex items-center justify-between z-20 border-b border-white/5">
-            <div x-show="selectedGuild" class="flex items-center gap-3" x-transition>
-                <img :src="selectedGuild.icon || 'https://cdn.discordapp.com/embed/avatars/0.png'" class="w-9 h-9 rounded-xl object-cover border border-white/10">
-                <div class="text-left">
-                    <p class="font-bold text-white text-sm truncate max-w-[150px]" x-text="selectedGuild.name"></p>
-                    <p class="text-[10px] text-emerald-400 font-medium">● Online</p>
+        <header class="top-header px-4 py-3 flex items-center justify-between z-20 border-b border-white/10">
+            <div class="flex items-center gap-3">
+                <button @click="showMenu = true" class="p-2 rounded-xl hover:bg-white/10 transition-colors"><i class="fas fa-ellipsis-v text-xl text-white"></i></button>
+                <div x-show="selectedGuild" class="flex items-center gap-3">
+                    <img :src="selectedGuild.icon || 'https://cdn.discordapp.com/embed/avatars/0.png'" class="w-10 h-10 rounded-xl object-cover border border-white/20">
+                    <div>
+                        <p class="font-bold text-white text-sm" x-text="selectedGuild.name"></p>
+                        <span class="status-badge status-online"><i class="fas fa-circle text-[6px]"></i> Online</span>
+                    </div>
                 </div>
             </div>
-            <div x-show="!selectedGuild" class="flex items-center gap-3">
-                <img :src="userAvatar" class="w-9 h-9 rounded-full border border-indigo-500">
-                <p class="font-bold text-white text-sm" x-text="user.global_name || user.username"></p>
-            </div>
-            <a href="/logout" class="text-slate-400 hover:text-red-400 p-2 transition-colors"><i class="fas fa-sign-out-alt text-lg"></i></a>
+            <a href="/logout" class="text-slate-400 hover:text-red-400 p-2"><i class="fas fa-sign-out-alt text-lg"></i></a>
         </header>
 
         <main class="flex-1 overflow-y-auto no-scrollbar p-4 pb-28" style="-webkit-overflow-scrolling: touch;">
-            <div x-show="activeTab === 'home'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0" class="space-y-6">
-                <div x-show="!selectedGuild">
-                    <h2 class="text-xl font-bold text-white mb-4">Select a Server</h2>
+            <div x-show="activePanel === 'antinuke'" class="space-y-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-bold text-white">🛡️ Antinuke System</h2>
+                    <button @click="activePanel = 'home'" class="text-slate-400 hover:text-white"><i class="fas fa-arrow-left mr-2"></i>Back</button>
+                </div>
+                <div class="glass p-5 bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30 mb-6">
+                    <p class="text-sm text-slate-300">Protect your server from malicious users and unauthorized actions</p>
+                </div>
+                <div class="space-y-4">
+                    <template x-for="setting in antinukeSettings" :key="setting.id">
+                        <div class="config-card flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl flex items-center justify-center" :class="setting.bgColor"><i :class="setting.icon" :class="setting.color"></i></div>
+                                <div>
+                                    <p class="font-medium text-white" x-text="setting.name"></p>
+                                    <p class="text-xs text-slate-400" x-text="setting.description"></p>
+                                </div>
+                            </div>
+                            <div class="toggle-switch" :class="setting.enabled ? 'active' : ''" @click="toggleAntinuke(setting.id)"></div>
+                        </div>
+                    </template>
+                </div>
+                <div class="glass p-5 mt-6">
+                    <h3 class="font-bold text-white mb-3"> Whitelisted Users</h3>
+                    <p class="text-sm text-slate-400 mb-4">These users can use commands without prefix</p>
+                    <div class="space-y-2">
+                        <template x-for="user in whitelistUsers" :key="user.id">
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-800/50">
+                                <div class="flex items-center gap-3">
+                                    <img :src="user.avatar" class="w-8 h-8 rounded-full">
+                                    <div>
+                                        <p class="text-sm font-medium text-white" x-text="user.name"></p>
+                                        <p class="text-xs text-slate-500" x-text="'ID: ' + user.id"></p>
+                                    </div>
+                                </div>
+                                <button @click="removeFromWhitelist(user.id)" class="text-red-400 hover:text-red-300 p-2"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </template>
+                        <div x-show="whitelistUsers.length === 0" class="text-center py-4 text-slate-500">No whitelisted users</div>
+                    </div>
+                    <div class="mt-4 p-3 rounded-xl bg-slate-800/50">
+                        <p class="text-xs text-slate-400 mb-2">Add user by ID:</p>
+                        <div class="flex gap-2">
+                            <input type="text" x-model="newWhitelistId" placeholder="User ID" class="flex-1 bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                            <button @click="addToWhitelist()" class="btn-primary px-4 py-2 rounded-lg text-white text-sm font-medium">Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="activePanel === 'home'" class="space-y-6">
+                <div x-show="!selectedGuild" class="space-y-4">
+                    <h2 class="text-xl font-bold text-white">Select Your Server</h2>
                     <div class="space-y-3">
                         <template x-for="g in guilds">
-                            <button @click="selectGuild(g)" class="g-box p-4 flex items-center gap-4 text-left w-full border border-white/5">
-                                <img :src="g.icon || 'https://cdn.discordapp.com/embed/avatars/0.png'" class="w-12 h-12 rounded-xl object-cover">
-                                <div class="flex-1 min-w-0">
-                                    <p class="font-bold text-white truncate" x-text="g.name"></p>
+                            <button @click="selectGuild(g)" class="glass p-4 flex items-center gap-4 w-full text-left">
+                                <img :src="g.icon || 'https://cdn.discordapp.com/embed/avatars/0.png'" class="w-14 h-14 rounded-xl object-cover">
+                                <div class="flex-1">
+                                    <p class="font-bold text-white" x-text="g.name"></p>
                                     <p class="text-xs text-slate-400" x-text="g.members + ' Members'"></p>
                                 </div>
                                 <i class="fas fa-chevron-right text-slate-600"></i>
@@ -130,106 +248,90 @@ DASHBOARD_TEMPLATE = """
                 </div>
 
                 <div x-show="selectedGuild" class="space-y-6">
-                    <div class="g-box grad-setup p-5 relative overflow-hidden">
-                        <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+                    <div class="glass p-5 bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border-emerald-500/30">
+                        <div class="flex items-center justify-between mb-3">
                             <div class="flex items-center gap-3">
-                                <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xl"><i class="fas fa-bolt"></i></div>
+                                <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-xl"><i class="fas fa-bolt"></i></div>
                                 <div>
                                     <h3 class="text-lg font-bold text-white">1-Click Setup</h3>
-                                    <p class="text-slate-400 text-xs">Auto-create channels & roles</p>
+                                    <p class="text-xs text-slate-400">Auto-configure your server</p>
                                 </div>
                             </div>
-                            <button @click="runSetup()" class="btn-glow px-6 py-2.5 rounded-xl text-white font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                                <i class="fas fa-magic"></i> Setup Now
-                            </button>
+                            <button @click="runSetup()" class="btn-primary px-5 py-2.5 rounded-xl text-white font-bold text-sm">Setup Now</button>
                         </div>
                     </div>
-
                     <div class="grid grid-cols-2 gap-3">
-                        <div class="g-box p-4 border-l-4 border-l-indigo-500">
+                        <div class="glass p-4 border-l-4 border-l-indigo-500">
                             <i class="fas fa-users text-indigo-400 text-xl mb-2"></i>
                             <p class="text-2xl font-bold text-white" x-text="selectedGuild.members"></p>
                             <p class="text-xs text-slate-400">Members</p>
                         </div>
-                        <div class="g-box p-4 border-l-4 border-l-purple-500">
-                            <i class="fas fa-crown text-purple-400 text-xl mb-2"></i>
-                            <p class="text-2xl font-bold text-white" x-text="userPremium.active ? 'Active' : 'Free'"></p>
-                            <p class="text-xs text-slate-400">Premium</p>
+                        <div class="glass p-4 border-l-4 border-l-purple-500">
+                            <i class="fas fa-shield-alt text-purple-400 text-xl mb-2"></i>
+                            <p class="text-2xl font-bold text-white">Active</p>
+                            <p class="text-xs text-slate-400">Protection</p>
                         </div>
                     </div>
-
-                    <div class="grid grid-cols-3 gap-3">
-                        <button @click="runCommand('!play')" class="g-box p-4 flex flex-col items-center gap-2 border-t-4 border-t-cyan-500">
-                            <i class="fas fa-music text-cyan-400 text-xl"></i><span class="text-xs font-medium text-white">Music</span>
-                        </button>
-                        <button @click="runCommand('!balance')" class="g-box p-4 flex flex-col items-center gap-2 border-t-4 border-t-emerald-500">
-                            <i class="fas fa-coins text-emerald-400 text-xl"></i><span class="text-xs font-medium text-white">Economy</span>
-                        </button>
-                        <button @click="runCommand('!ban')" class="g-box p-4 flex flex-col items-center gap-2 border-t-4 border-t-red-500">
-                            <i class="fas fa-gavel text-red-400 text-xl"></i><span class="text-xs font-medium text-white">Mod</span>
-                        </button>
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-3">Quick Actions</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button @click="activePanel = 'antinuke'" class="glass p-4 flex flex-col items-center gap-2 border-t-4 border-t-amber-500">
+                                <i class="fas fa-shield-alt text-amber-400 text-2xl"></i><span class="text-sm font-medium text-white">Antinuke</span>
+                            </button>
+                            <button @click="executeCommand('ban')" class="glass p-4 flex flex-col items-center gap-2 border-t-4 border-t-red-500">
+                                <i class="fas fa-gavel text-red-400 text-2xl"></i><span class="text-sm font-medium text-white">Moderation</span>
+                            </button>
+                            <button @click="executeCommand('balance')" class="glass p-4 flex flex-col items-center gap-2 border-t-4 border-t-emerald-500">
+                                <i class="fas fa-coins text-emerald-400 text-2xl"></i><span class="text-sm font-medium text-white">Economy</span>
+                            </button>
+                            <button @click="executeCommand('play')" class="glass p-4 flex flex-col items-center gap-2 border-t-4 border-t-cyan-500">
+                                <i class="fas fa-music text-cyan-400 text-2xl"></i><span class="text-sm font-medium text-white">Music</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div x-show="activeTab === 'premium'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0" class="space-y-6">
+            <div x-show="activePanel === 'premium'" class="space-y-6">
                 <div class="text-center mb-6">
-                    <h2 class="text-2xl font-bold text-white mb-1">Unlock <span class="text-grad">Premium</span></h2>
-                    <p class="text-slate-400 text-sm">Get the ultimate power for your server.</p>
+                    <h2 class="text-2xl font-bold gradient-text mb-2">Unlock Premium</h2>
+                    <p class="text-slate-400 text-sm">Get exclusive features for your server</p>
                 </div>
                 <div class="space-y-4">
-                    <div class="g-box p-5 border border-amber-500/30">
-                        <div class="flex justify-between items-center mb-2"><h3 class="text-lg font-bold text-amber-400">🥇 Gold</h3><p class="text-xl font-bold text-white">₹125<span class="text-xs text-slate-400">/mo</span></p></div>
-                        <p class="text-sm text-slate-400 mb-3">No-prefix mode, +10% drop rates.</p>
-                        <button class="w-full py-2.5 rounded-xl bg-amber-500/20 text-amber-400 font-bold text-sm border border-amber-500/30 active:scale-95 transition-transform">Purchase</button>
+                    <div class="glass p-5 border-2 border-amber-500/30">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-xl font-bold text-amber-400"> Gold</h3>
+                            <p class="text-2xl font-bold text-white">125<span class="text-xs text-slate-400">/mo</span></p>
+                        </div>
+                        <ul class="text-sm text-slate-300 space-y-2 mb-4">
+                            <li><i class="fas fa-check text-emerald-400 mr-2"></i>No-prefix mode</li>
+                            <li><i class="fas fa-check text-emerald-400 mr-2"></i>+10% drop rates</li>
+                        </ul>
+                        <button @click="openPayment('Gold', 125)" class="w-full py-3 rounded-xl bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">Purchase</button>
                     </div>
-                    <div class="g-box p-5 border-2 border-indigo-500 relative">
-                        <div class="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] font-bold px-3 py-0.5 rounded-full">POPULAR</div>
-                        <div class="flex justify-between items-center mb-2"><h3 class="text-lg font-bold text-indigo-400">💎 Platinum</h3><p class="text-xl font-bold text-white">₹249<span class="text-xs text-slate-400">/mo</span></p></div>
-                        <p class="text-sm text-slate-400 mb-3">Server-wide no-prefix, +25% drops.</p>
-                        <button class="w-full py-2.5 rounded-xl btn-glow text-white font-bold text-sm active:scale-95 transition-transform">Purchase Now</button>
+                    <div class="glass p-5 border-2 border-indigo-500 relative">
+                        <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full">POPULAR</div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-xl font-bold text-indigo-400">💎 Platinum</h3>
+                            <p class="text-2xl font-bold text-white">₹249<span class="text-xs text-slate-400">/mo</span></p>
+                        </div>
+                        <ul class="text-sm text-slate-300 space-y-2 mb-4">
+                            <li><i class="fas fa-check text-emerald-400 mr-2"></i>All Gold features</li>
+                            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Server-wide no-prefix</li>
+                        </ul>
+                        <button @click="openPayment('Platinum', 249)" class="w-full py-3 rounded-xl btn-primary text-white font-bold">Purchase Now</button>
                     </div>
-                    <div class="g-box p-5 border border-purple-500/30">
-                        <div class="flex justify-between items-center mb-2"><h3 class="text-lg font-bold text-purple-400">👑 Ultimate</h3><p class="text-xl font-bold text-white">₹499<span class="text-xs text-slate-400">/mo</span></p></div>
-                        <p class="text-sm text-slate-400 mb-3">Unlimited auto-hunt, VIP badge.</p>
-                        <button class="w-full py-2.5 rounded-xl bg-purple-500/20 text-purple-400 font-bold text-sm border border-purple-500/30 active:scale-95 transition-transform">Purchase</button>
-                    </div>
-                </div>
-            </div>
-
-            <div x-show="activeTab === 'settings'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0" class="space-y-6">
-                <h2 class="text-xl font-bold text-white mb-4">Settings</h2>
-                <div class="g-box p-4 flex items-center justify-between active:scale-98 transition-transform">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400"><i class="fas fa-bell"></i></div>
-                        <div><p class="font-medium text-white">Notifications</p><p class="text-xs text-slate-400">Manage alerts</p></div>
-                    </div>
-                    <i class="fas fa-chevron-right text-slate-600"></i>
-                </div>
-                <div class="g-box p-4 flex items-center justify-between active:scale-98 transition-transform">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400"><i class="fas fa-shield-alt"></i></div>
-                        <div><p class="font-medium text-white">Privacy & Security</p><p class="text-xs text-slate-400">Data & permissions</p></div>
-                    </div>
-                    <i class="fas fa-chevron-right text-slate-600"></i>
                 </div>
             </div>
         </main>
 
         <nav class="bottom-nav fixed bottom-0 left-0 right-0 z-50">
             <div class="flex justify-around items-center h-16">
-                <button @click="activeTab = 'home'" class="flex flex-col items-center justify-center w-full h-full space-y-1 active:scale-90 transition-transform" :class="activeTab === 'home' ? 'text-indigo-400' : 'text-slate-500'">
-                    <i class="fas fa-home text-xl" :class="activeTab === 'home' ? 'drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]' : ''"></i>
-                    <span class="text-[10px] font-medium">Home</span>
+                <button @click="activePanel = 'home'; showMenu = false" class="flex flex-col items-center justify-center w-full h-full space-y-1" :class="activePanel === 'home' ? 'text-indigo-400' : 'text-slate-500'">
+                    <i class="fas fa-home text-xl"></i><span class="text-[10px] font-medium">Home</span>
                 </button>
-                <button @click="activeTab = 'premium'" class="flex flex-col items-center justify-center w-full h-full space-y-1 active:scale-90 transition-transform" :class="activeTab === 'premium' ? 'text-indigo-400' : 'text-slate-500'">
-                    <i class="fas fa-crown text-xl" :class="activeTab === 'premium' ? 'drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]' : ''"></i>
-                    <span class="text-[10px] font-medium">Premium</span>
-                </button>
-                <button @click="activeTab = 'settings'" class="flex flex-col items-center justify-center w-full h-full space-y-1 active:scale-90 transition-transform" :class="activeTab === 'settings' ? 'text-indigo-400' : 'text-slate-500'">
-                    <i class="fas fa-cog text-xl" :class="activeTab === 'settings' ? 'drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]' : ''"></i>
-                    <span class="text-[10px] font-medium">Settings</span>
+                <button @click="activePanel = 'premium'" class="flex flex-col items-center justify-center w-full h-full space-y-1" :class="activePanel === 'premium' ? 'text-indigo-400' : 'text-slate-500'">
+                    <i class="fas fa-crown text-xl"></i><span class="text-[10px] font-medium">Premium</span>
                 </button>
             </div>
         </nav>
@@ -239,37 +341,57 @@ DASHBOARD_TEMPLATE = """
         function appData() {
             return {
                 loading: true, isLoggedIn: false, user: null, guilds: [], selectedGuild: null,
-                activeTab: 'home', userPremium: {active: false}, toasts: [],
-                get userAvatar() { 
-                    if (!this.user) return 'https://cdn.discordapp.com/embed/avatars/0.png';
-                    const ext = this.user.avatar && this.user.avatar.startsWith('a_') ? 'gif' : 'png';
-                    return `https://cdn.discordapp.com/avatars/${this.user.id}/${this.user.avatar}.${ext}`; 
-                },
-                showToast(msg, type = 'success') {
-                    const id = Date.now();
-                    this.toasts.push({ id, msg, type, show: true });
-                    setTimeout(() => {
-                        const t = this.toasts.find(x => x.id === id);
-                        if (t) t.show = false;
-                        setTimeout(() => this.toasts = this.toasts.filter(x => x.id !== id), 300);
-                    }, 3000);
-                },
-                async init() {
-                    try {
-                        const res = await fetch('/api/user'); 
-                        if(res.ok) { 
-                            this.user = await res.json(); 
-                            this.isLoggedIn = true; 
-                            const gRes = await fetch('/api/guilds');
-                            if(gRes.ok) this.guilds = await gRes.json();
-                            if(this.guilds.length === 1) this.selectedGuild = this.guilds[0];
-                        }
-                    } catch(e) { this.showToast('Failed to load session', 'error'); } 
-                    this.loading = false;
-                },
-                selectGuild(g) { this.selectedGuild = g; this.showToast(`Loaded ${g.name}`); },
-                runSetup() { this.showToast('⚡ 1-Click Setup initiated!'); },
-                runCommand(cmd) { this.showToast(`Executing ${cmd}...`); }
+                activePanel: 'home', showMenu: false, activeCategory: 'antinuke', expandedCategory: 'antinuke',
+                toasts: [],
+                antinukeSettings: [
+                    { id: 'anti_ban', name: 'Anti-Ban', description: 'Prevent unauthorized bans', icon: 'fa-user-shield', color: 'text-red-400', bgColor: 'bg-red-500/20', enabled: false },
+                    { id: 'anti_kick', name: 'Anti-Kick', description: 'Prevent unauthorized kicks', icon: 'fa-user-slash', color: 'text-orange-400', bgColor: 'bg-orange-500/20', enabled: false },
+                    { id: 'anti_channel_delete', name: 'Anti-Channel Delete', description: 'Prevent channel deletion', icon: 'fa-trash-alt', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', enabled: false },
+                    { id: 'anti_role_create', name: 'Anti-Role Create', description: 'Prevent role creation', icon: 'fa-user-tag', color: 'text-purple-400', bgColor: 'bg-purple-500/20', enabled: false },
+                    { id: 'anti_bot_add', name: 'Anti-Bot Add', description: 'Prevent bot additions', icon: 'fa-robot', color: 'text-blue-400', bgColor: 'bg-blue-500/20', enabled: false }
+                ],
+                whitelistUsers: [], newWhitelistId: '',
+                categories: [
+                    { id: 'antinuke', name: 'Antinuke', icon: 'fa-shield-alt', color: 'text-amber-400', commands: [
+                        { name: 'antinuke', label: 'Control Panel', icon: 'fa-shield-alt' },
+                        { name: 'antinuke_enable', label: 'Enable All', icon: 'fa-check-circle' },
+                        { name: 'antinuke_disable', label: 'Disable All', icon: 'fa-times-circle' },
+                        { name: 'whitelist_add', label: 'Add to Whitelist', icon: 'fa-user-plus' },
+                        { name: 'whitelist_list', label: 'View Whitelist', icon: 'fa-list' }
+                    ]},
+                    { id: 'moderation', name: 'Moderation', icon: 'fa-gavel', color: 'text-red-400', commands: [
+                        { name: 'ban', label: 'Ban Member', icon: 'fa-ban' },
+                        { name: 'kick', label: 'Kick Member', icon: 'fa-user-slash' },
+                        { name: 'clear', label: 'Clear Messages', icon: 'fa-trash' },
+                        { name: 'warn', label: 'Warn Member', icon: 'fa-exclamation-triangle' },
+                        { name: 'timeout', label: 'Timeout Member', icon: 'fa-clock' }
+                    ]},
+                    { id: 'economy', name: 'Economy', icon: 'fa-coins', color: 'text-emerald-400', commands: [
+                        { name: 'balance', label: 'Check Balance', icon: 'fa-wallet' },
+                        { name: 'daily', label: 'Daily Reward', icon: 'fa-gift' },
+                        { name: 'work', label: 'Work', icon: 'fa-briefcase' },
+                        { name: 'leaderboard', label: 'Leaderboard', icon: 'fa-trophy' }
+                    ]},
+                    { id: 'music', name: 'Music', icon: 'fa-music', color: 'text-cyan-400', commands: [
+                        { name: 'play', label: 'Play Song', icon: 'fa-play' },
+                        { name: 'pause', label: 'Pause', icon: 'fa-pause' },
+                        { name: 'skip', label: 'Skip', icon: 'fa-forward' },
+                        { name: 'stop', label: 'Stop', icon: 'fa-stop' }
+                    ]}
+                ],
+                get userAvatar() { if (!this.user) return 'https://cdn.discordapp.com/embed/avatars/0.png'; const ext = this.user.avatar && this.user.avatar.startsWith('a_') ? 'gif' : 'png'; return `https://cdn.discordapp.com/avatars/${this.user.id}/${this.user.avatar}.${ext}`; },
+                showToast(msg, type = 'success') { const id = Date.now(); this.toasts.push({ id, msg, type, show: true }); setTimeout(() => { const t = this.toasts.find(x => x.id === id); if (t) t.show = false; setTimeout(() => this.toasts = this.toasts.filter(x => x.id !== id), 300); }, 3000); },
+                async init() { try { const res = await fetch('/api/user'); if (res.ok) { this.user = await res.json(); this.isLoggedIn = true; const gRes = await fetch('/api/guilds'); if (gRes.ok) this.guilds = await gRes.json(); if (this.guilds.length === 1) this.selectGuild(this.guilds[0]); } } catch (e) { this.showToast('Failed to load session', 'error'); } this.loading = false; },
+                async selectGuild(g) { this.selectedGuild = g; await this.loadAntinukeSettings(); await this.loadWhitelist(); this.showToast(`Loaded ${g.name}`); },
+                async loadAntinukeSettings() { if (!this.selectedGuild) return; try { const res = await fetch(`/api/antinuke/${this.selectedGuild.id}`); if (res.ok) { const settings = await res.json(); this.antinukeSettings.forEach(setting => { const s = settings.find(x => x.program === setting.id); if (s) setting.enabled = s.enabled; }); } } catch (e) { console.error('Failed to load antinuke settings:', e); } },
+                async toggleAntinuke(settingId) { if (!this.selectedGuild) return; const setting = this.antinukeSettings.find(s => s.id === settingId); if (!setting) return; try { const res = await fetch(`/api/antinuke/${this.selectedGuild.id}/${settingId}`, { method: 'POST' }); if (res.ok) { setting.enabled = !setting.enabled; this.showToast(`${setting.name} ${setting.enabled ? 'enabled' : 'disabled'}`); } } catch (e) { this.showToast('Failed to update setting', 'error'); } },
+                async loadWhitelist() { if (!this.selectedGuild) return; try { const res = await fetch(`/api/whitelist/${this.selectedGuild.id}`); if (res.ok) this.whitelistUsers = await res.json(); } catch (e) { console.error('Failed to load whitelist:', e); } },
+                async addToWhitelist() { if (!this.newWhitelistId || !this.selectedGuild) return; try { const res = await fetch(`/api/whitelist/${this.selectedGuild.id}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({user_id: this.newWhitelistId}) }); if (res.ok) { this.showToast('User added to whitelist'); this.newWhitelistId = ''; await this.loadWhitelist(); } else { const data = await res.json(); this.showToast(data.error || 'Failed to add user', 'error'); } } catch (e) { this.showToast('Failed to add user', 'error'); } },
+                async removeFromWhitelist(userId) { if (!this.selectedGuild) return; try { const res = await fetch(`/api/whitelist/${this.selectedGuild.id}/${userId}`, { method: 'DELETE' }); if (res.ok) { this.showToast('User removed from whitelist'); await this.loadWhitelist(); } } catch (e) { this.showToast('Failed to remove user', 'error'); } },
+                toggleCategory(catId) { if (this.expandedCategory === catId) this.expandedCategory = null; else { this.expandedCategory = catId; this.activeCategory = catId; } },
+                async executeCommand(cmdName) { this.showMenu = false; if (!this.selectedGuild) { this.showToast('Please select a server first', 'error'); return; } try { const res = await fetch('/api/command', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ guild_id: this.selectedGuild.id, command: '!' + cmdName }) }); const data = await res.json(); if (data.success) this.showToast(data.message || 'Command executed'); else this.showToast(data.error || 'Command failed', 'error'); } catch (e) { this.showToast('Failed to execute command', 'error'); } },
+                runSetup() { this.executeCommand('quicksetup'); },
+                openPayment(name, price) { this.showToast(`Payment page for ${name} - ₹${price}`); }
             }
         }
     </script>
@@ -278,13 +400,17 @@ DASHBOARD_TEMPLATE = """
 """
 
 @app.route('/login')
-def login(): return redirect(f"{DISCORD_API}/oauth2/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds")
+def login():
+    return redirect(f"{DISCORD_API}/oauth2/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds")
 
 @app.route('/callback')
 def callback():
     code = request.args.get('code')
     if not code: return "Error", 400
-    r = requests.post(f"{DISCORD_API}/oauth2/token", data={'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET, 'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT_URI}, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    r = requests.post(f"{DISCORD_API}/oauth2/token", data={
+        'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET,
+        'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT_URI
+    }, headers={'Content-Type': 'application/x-www-form-urlencoded'})
     if r.status_code != 200: return f"Error: {r.text}", 500
     tokens = r.json()
     h = {'Authorization': f'Bearer {tokens["access_token"]}'}
@@ -296,29 +422,161 @@ def callback():
         if g['id'] in bot_guilds:
             perms = int(g.get('permissions', 0))
             if is_developer(user['id']) or (perms & 0x8) or (perms & 0x20):
-                valid.append({'id': g['id'], 'name': g['name'], 'icon': f"https://cdn.discordapp.com/icons/{g['id']}/{g['icon']}.png" if g.get('icon') else None, 'members': 0})
-    session['user'] = user; session['guilds'] = valid; session['access_token'] = tokens['access_token']
+                valid.append({
+                    'id': g['id'], 'name': g['name'],
+                    'icon': f"https://cdn.discordapp.com/icons/{g['id']}/{g['icon']}.png" if g.get('icon') else None,
+                    'members': 0
+                })
+    session['user'] = user
+    session['guilds'] = valid
+    session['access_token'] = tokens['access_token']
     return redirect('/')
 
 @app.route('/api/user')
-def api_user(): 
-    if 'user' in session: return jsonify(session['user'])
-    return jsonify({}), 401
+@login_required
+def api_user():
+    return jsonify(session['user'])
 
 @app.route('/api/guilds')
+@login_required
 def api_guilds():
-    if 'guilds' not in session: return jsonify([]), 401
-    for g in session['guilds']:
+    guilds = session.get('guilds', [])
+    for g in guilds:
         obj = bot_instance.get_guild(int(g['id']))
         if obj: g['members'] = obj.member_count
-    return jsonify(session['guilds'])
+    return jsonify(guilds)
+
+@app.route('/api/antinuke/<int:guild_id>')
+@login_required
+def api_get_antinuke(guild_id):
+    async def get_settings():
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("SELECT program, enabled FROM antinuke_settings WHERE guild_id=?", (guild_id,))
+            rows = await cursor.fetchall()
+            return [{"program": r[0], "enabled": bool(r[1])} for r in rows]
+    return jsonify(run_async(get_settings()))
+
+@app.route('/api/antinuke/<int:guild_id>/<program>', methods=['POST'])
+@login_required
+def api_toggle_antinuke(guild_id, program):
+    async def toggle():
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("SELECT enabled FROM antinuke_settings WHERE guild_id=? AND program=?", (guild_id, program))
+            row = await cursor.fetchone()
+            current = row[0] if row else False
+            await db.execute("INSERT OR REPLACE INTO antinuke_settings (guild_id, program, enabled) VALUES (?, ?, ?)", (guild_id, program, not current))
+            await db.commit()
+            return not current
+    return jsonify({"success": True, "enabled": run_async(toggle())})
+
+@app.route('/api/whitelist/<int:guild_id>')
+@login_required
+def api_get_whitelist(guild_id):
+    async def get_users():
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("SELECT user_id FROM no_prefix_users WHERE guild_id=?", (guild_id,))
+            rows = await cursor.fetchall()
+            users = []
+            for (user_id,) in rows:
+                user = bot_instance.get_user(user_id)
+                users.append({
+                    "id": user_id,
+                    "name": user.name if user else f"Unknown ({user_id})",
+                    "avatar": user.display_avatar.url if user else "https://cdn.discordapp.com/embed/avatars/0.png"
+                })
+            return users
+    return jsonify(run_async(get_users()))
+
+@app.route('/api/whitelist/<int:guild_id>', methods=['POST'])
+@login_required
+def api_add_whitelist(guild_id):
+    data = request.json
+    user_id = int(data.get('user_id', 0))
+    async def add():
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("SELECT COUNT(*) FROM no_prefix_users WHERE guild_id=?", (guild_id,))
+            count = (await cursor.fetchone())[0]
+            if count >= 10: return {"success": False, "error": "Limit of 10 users reached"}
+            await db.execute("INSERT OR IGNORE INTO no_prefix_users (guild_id, user_id) VALUES (?, ?)", (guild_id, user_id))
+            await db.commit()
+            return {"success": True}
+    return jsonify(run_async(add()))
+
+@app.route('/api/whitelist/<int:guild_id>/<int:user_id>', methods=['DELETE'])
+@login_required
+def api_remove_whitelist(guild_id, user_id):
+    async def remove():
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("DELETE FROM no_prefix_users WHERE guild_id=? AND user_id=?", (guild_id, user_id))
+            await db.commit()
+            return {"success": True}
+    return jsonify(run_async(remove()))
+
+@app.route('/api/command', methods=['POST'])
+@login_required
+def api_command():
+    data = request.json
+    guild_id = int(data.get('guild_id', 0))
+    command = data.get('command', '')
+    
+    guild = bot_instance.get_guild(guild_id)
+    if not guild: return jsonify({"success": False, "error": "Guild not found"}), 404
+    
+    channel = guild.text_channels[0] if guild.text_channels else None
+    if not channel: return jsonify({"success": False, "error": "No text channels"}), 400
+    
+    user_id = int(session['user']['id'])
+    member = guild.get_member(user_id)
+    
+    class FakeUser:
+        id = user_id
+        name = session['user']['username']
+        display_name = name
+        bot = False
+        guild_permissions = member.guild_permissions if member else discord.Permissions(administrator=True)
+    
+    class FakeMessage:
+        content = command
+        author = FakeUser()
+        channel = channel
+        guild = guild
+        created_at = datetime.utcnow()
+        attachments = []
+        embeds = []
+        mentions = []
+        role_mentions = []
+        channel_mentions = []
+    
+    async def run():
+        try:
+            ctx = await bot_instance.get_context(FakeMessage())
+            if ctx.valid:
+                await bot_instance.invoke(ctx)
+                return {"success": True, "message": f"Command '{command}' executed"}
+            return {"success": False, "error": "Invalid command"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        result = loop.run_until_complete(run())
+        return jsonify(result)
+    finally:
+        loop.close()
 
 @app.route('/', methods=['GET'])
-def index(): return DASHBOARD_TEMPLATE
+def index():
+    return DASHBOARD_TEMPLATE
 
 @app.route('/logout')
-def logout(): session.clear(); return redirect('/')
+def logout():
+    session.clear()
+    return redirect('/')
 
-def run_dashboard(): app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)), threaded=True)
-def set_bot_instance(bot): 
-    global bot_instance; bot_instance=bot
+def run_dashboard():
+    app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)), threaded=True)
+
+def set_bot_instance(bot):
+    global bot_instance
+    bot_instance = bot
