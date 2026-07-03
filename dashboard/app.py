@@ -319,6 +319,6 @@ def index(): return DASHBOARD_TEMPLATE
 @app.route('/logout')
 def logout(): session.clear(); return redirect('/')
 
-def run_dashboard(): app.run(host='0.0.0.0', port=8080, threaded=True)
+def run_dashboard(): app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)), threaded=True)
 def set_bot_instance(bot): 
     global bot_instance; bot_instance=bot
