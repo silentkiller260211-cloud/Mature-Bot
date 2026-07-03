@@ -14,10 +14,12 @@ async def init_db():
             )
         """)
         
-        # Premium Table
+        # Premium Table (UPDATED with duration)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS premium (
-                guild_id INTEGER PRIMARY KEY, tier TEXT DEFAULT 'none', 
+                guild_id INTEGER PRIMARY KEY, 
+                tier TEXT DEFAULT 'none',
+                duration TEXT DEFAULT 'monthly',
                 expires_at TEXT
             )
         """)
@@ -35,6 +37,34 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS antinuke_settings (
                 guild_id INTEGER, program TEXT, enabled BOOLEAN DEFAULT 0, 
                 PRIMARY KEY (guild_id, program)
+            )
+        """)
+        
+        # Premium Codes Table (NEW)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS premium_codes (
+                code TEXT PRIMARY KEY,
+                tier TEXT NOT NULL,
+                duration TEXT NOT NULL,
+                days INTEGER NOT NULL,
+                user_id INTEGER,
+                used BOOLEAN DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                used_at TEXT
+            )
+        """)
+        
+        # Payments Table (NEW)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                payment_id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
+                tier TEXT NOT NULL,
+                duration TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT
             )
         """)
         
@@ -65,3 +95,52 @@ async def remove_no_prefix_user(guild_id, user_id):
         await db.execute("DELETE FROM no_prefix_users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
         await db.commit()
         return True
+
+# NEW: Premium Code Functions
+async def create_premium_code(code, tier, duration, days, user_id=None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO premium_codes (code, tier, duration, days, user_id) VALUES (?, ?, ?, ?, ?)",
+            (code, tier, duration, days, user_id)
+        )
+        await db.commit()
+
+async def get_premium_code(code):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT code, tier, duration, days, user_id, used FROM premium_codes WHERE code = ?",
+            (code,)
+        )
+        return await cursor.fetchone()
+
+async def mark_code_used(code, user_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE premium_codes SET used = 1, used_at = CURRENT_TIMESTAMP, user_id = ? WHERE code = ?",
+            (user_id, code)
+        )
+        await db.commit()
+
+async def save_payment(payment_id, user_id, amount, tier, duration, status='pending'):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO payments (payment_id, user_id, amount, tier, duration, status) VALUES (?, ?, ?, ?, ?, ?)",
+            (payment_id, user_id, amount, tier, duration, status)
+        )
+        await db.commit()
+
+async def update_payment_status(payment_id, status):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE payments SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE payment_id = ?",
+            (status, payment_id)
+        )
+        await db.commit()
+
+async def get_payment_info(payment_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT tier, duration FROM payments WHERE payment_id = ?",
+            (payment_id,)
+        )
+        return await cursor.fetchone()
