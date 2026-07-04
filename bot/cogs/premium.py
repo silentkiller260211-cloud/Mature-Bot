@@ -73,8 +73,8 @@ class Premium(commands.Cog):
     @commands.is_owner()
     async def generatecode(self, ctx, tier: str, duration: str = 'monthly'):
         """🎫 Generate a premium code (Developer only)"""
-        if tier.lower() not in ['gold', 'platinum', 'ultimate']:
-            return await ctx.send("❌ Invalid tier! Use: gold, platinum, or ultimate")
+        if tier.lower() not in ['silver', 'gold', 'black']:
+            return await ctx.send("❌ Invalid tier! Use: silver, gold, or black")
         
         duration_map = {
             'monthly': 30,
@@ -98,7 +98,7 @@ class Premium(commands.Cog):
 
     @commands.hybrid_command()
     @commands.has_permissions(administrator=True)
-    async def addpremium(self, ctx, guild_id: int, tier: str="gold", duration: str="monthly"):
+    async def addpremium(self, ctx, guild_id: int, tier: str="silver", duration: str="monthly"):
         """Add premium to a server (Developer only)"""
         duration_map = {
             'monthly': 30,
