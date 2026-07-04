@@ -14,7 +14,7 @@ async def init_db():
             )
         """)
         
-        # Premium Table (UPDATED with duration)
+        # Premium Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS premium (
                 guild_id INTEGER PRIMARY KEY, 
@@ -96,7 +96,7 @@ async def remove_no_prefix_user(guild_id, user_id):
         await db.commit()
         return True
 
-# NEW: Premium Code Functions
+# Premium Code Functions
 async def create_premium_code(code, tier, duration, days, user_id=None):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
