@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, session, redirect, make_response
+from flask import render_template_string
 import requests
 import os
 import discord
