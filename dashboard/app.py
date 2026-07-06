@@ -909,6 +909,15 @@ def logout():
     session.clear()
     return redirect('/')
 
+@app.route('/oauth-success')
+def oauth_success():
+    """Handle Discord OAuth success and redirect to dashboard"""
+    # Get the state parameter if present
+    state = request.args.get('state')
+    
+    # Redirect to dashboard home
+    return redirect('/')
+
 def run_dashboard():
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)), threaded=True)
 
