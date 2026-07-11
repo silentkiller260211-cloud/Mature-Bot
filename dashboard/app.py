@@ -940,7 +940,7 @@ def api_premium_status(guild_id):
     # ... existing code ...
     return jsonify(run_async(check()))
 
-@app.route('/api/stats')  # ✅ YE SAHI HAI - same level par
+@app.route('/api/stats')
 def api_stats():
     """Get real-time bot statistics"""
     if not bot_instance:
