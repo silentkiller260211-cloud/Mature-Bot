@@ -934,66 +934,19 @@ def oauth_success():
     # Get the state parameter if present
     state = request.args.get('state')
 
-    @app.route('/api/stats')
+    @app.route('/api/premium-status/<int:guild_id>')
+@login_required
+def api_premium_status(guild_id):
+    # ... existing code ...
+    return jsonify(run_async(check()))
+
+@app.route('/api/stats')  # ✅ YE SAHI HAI - same level par
 def api_stats():
     """Get real-time bot statistics"""
     if not bot_instance:
         return jsonify({'error': 'Bot not ready'}), 503
     
-    if hasattr(bot_instance, 'start_time'):
-        delta = datetime.utcnow() - bot_instance.start_time
-        days = delta.days
-        hours, remainder = divmod(delta.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        uptime_formatted = f"{days}d {hours}h {minutes}m" if days > 0 else f"{hours}h {minutes}m"
-    else:
-        uptime_formatted = "0h 0m"
-    
-    total_guilds = len(bot_instance.guilds)
-    total_users = sum(g.member_count for g in bot_instance.guilds)
-    total_online = 0
-    
-    for guild in bot_instance.guilds:
-        try:
-            online_count = sum(1 for member in guild.members if member.status != discord.Status.offline)
-            total_online += online_count
-        except:
-            total_online += int(guild.member_count * 0.2)
-    
-    latency = round(bot_instance.latency * 1000)
-    
-    try:
-        import psutil
-        memory_usage = psutil.Process().memory_info().rss / 1024 / 1024
-        cpu_percent = psutil.cpu_percent()
-    except:
-        memory_usage = 0
-        cpu_percent = 0
-    
-    response = jsonify({
-        'servers': total_guilds,
-        'users': total_users,
-        'online_users': total_online,
-        'latency': latency,
-        'uptime': uptime_formatted,
-        'memory': f"{memory_usage:.1f}MB",
-        'cpu': f"{cpu_percent}%",
-        'ping': latency,
-        'shards': 1,
-        'commands': 76,
-        'timestamp': datetime.utcnow().isoformat()
-    })
-    
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    
-    return response
-    
-    # Redirect to dashboard home
-    return redirect('/')
-
-def run_dashboard():
+    def run_dashboard():
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)), threaded=True)
 
 def set_bot_instance(bot):
