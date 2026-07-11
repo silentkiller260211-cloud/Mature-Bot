@@ -513,6 +513,25 @@ DASHBOARD_TEMPLATE = """
                     <button @click="openPayment('black')" class="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-black text-white font-bold border border-purple-500/30 hover:from-purple-600/80 hover:to-black/80 transition-all">Purchase Now</button>
                 </div>
             </div>
+<!-- PREMIUM PANEL - TEMPORARILY DISABLED -->
+<div x-show="false" style="display:none;">
+    <!-- Existing premium panel code here -->
+</div>
+
+<!-- Maintenance Notice -->
+<div x-show="activePanel === 'premium'" class="space-y-6 pb-28 fade-in">
+    <div class="glass p-8 text-center">
+        <div class="w-20 h-20 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-tools text-4xl text-amber-400"></i>
+        </div>
+        <h2 class="text-3xl font-bold text-white mb-3">Premium System Under Maintenance</h2>
+        <p class="text-slate-400 mb-6">We're working on improving our payment system. Premium features will be available soon!</p>
+        <a href="https://discord.gg/YxeeaEg9V6" target="_blank" class="btn-primary inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold">
+            <i class="fab fa-discord"></i>
+            <span>Join Support Server</span>
+        </a>
+    </div>
+</div>
 
             <!-- Other panels remain the same... -->
             
@@ -683,20 +702,6 @@ DASHBOARD_TEMPLATE = """
                 runSetup() { this.executeCommand('quicksetup'); },
                 selectPlan(tier, duration) { const plan = this.pricing[tier][duration]; this.selectedPlan = { tier: tier, duration: duration, name: tier.charAt(0).toUpperCase() + tier.slice(1), durationLabel: plan.label, price: plan.price, link: plan.link }; },
                 openPayment(tier) { this.selectPlan(tier, this.selectedPlan.duration); this.showPayment = true; }
-                <!-- PREMIUM SECTION - TEMPORARILY DISABLED -->
-<div x-show="false" style="display:none;">
-    <!-- Existing premium panel code -->
-</div>
-
-<!-- OR add a notice -->
-<div class="glass p-6 text-center">
-    <div class="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
-        <i class="fas fa-tools text-3xl text-amber-400"></i>
-    </div>
-    <h3 class="text-2xl font-bold text-white mb-2">Premium System Under Maintenance</h3>
-    <p class="text-slate-400">We're working on improving our payment system. Premium features will be available soon!</p>
-    <p class="text-xs text-slate-500 mt-4">For inquiries, join our support server: <a href="https://discord.gg/YxeeaEg9V6" class="text-indigo-400 hover:underline">discord.gg/YxeeaEg9V6</a></p>
-</div>
             }
         }
     </script>
@@ -928,6 +933,62 @@ def oauth_success():
     """Handle Discord OAuth success and redirect to dashboard"""
     # Get the state parameter if present
     state = request.args.get('state')
+
+    @app.route('/api/stats')
+def api_stats():
+    """Get real-time bot statistics"""
+    if not bot_instance:
+        return jsonify({'error': 'Bot not ready'}), 503
+    
+    if hasattr(bot_instance, 'start_time'):
+        delta = datetime.utcnow() - bot_instance.start_time
+        days = delta.days
+        hours, remainder = divmod(delta.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_formatted = f"{days}d {hours}h {minutes}m" if days > 0 else f"{hours}h {minutes}m"
+    else:
+        uptime_formatted = "0h 0m"
+    
+    total_guilds = len(bot_instance.guilds)
+    total_users = sum(g.member_count for g in bot_instance.guilds)
+    total_online = 0
+    
+    for guild in bot_instance.guilds:
+        try:
+            online_count = sum(1 for member in guild.members if member.status != discord.Status.offline)
+            total_online += online_count
+        except:
+            total_online += int(guild.member_count * 0.2)
+    
+    latency = round(bot_instance.latency * 1000)
+    
+    try:
+        import psutil
+        memory_usage = psutil.Process().memory_info().rss / 1024 / 1024
+        cpu_percent = psutil.cpu_percent()
+    except:
+        memory_usage = 0
+        cpu_percent = 0
+    
+    response = jsonify({
+        'servers': total_guilds,
+        'users': total_users,
+        'online_users': total_online,
+        'latency': latency,
+        'uptime': uptime_formatted,
+        'memory': f"{memory_usage:.1f}MB",
+        'cpu': f"{cpu_percent}%",
+        'ping': latency,
+        'shards': 1,
+        'commands': 76,
+        'timestamp': datetime.utcnow().isoformat()
+    })
+    
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
     
     # Redirect to dashboard home
     return redirect('/')
