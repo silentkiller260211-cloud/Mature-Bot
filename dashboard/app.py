@@ -683,6 +683,20 @@ DASHBOARD_TEMPLATE = """
                 runSetup() { this.executeCommand('quicksetup'); },
                 selectPlan(tier, duration) { const plan = this.pricing[tier][duration]; this.selectedPlan = { tier: tier, duration: duration, name: tier.charAt(0).toUpperCase() + tier.slice(1), durationLabel: plan.label, price: plan.price, link: plan.link }; },
                 openPayment(tier) { this.selectPlan(tier, this.selectedPlan.duration); this.showPayment = true; }
+                <!-- PREMIUM SECTION - TEMPORARILY DISABLED -->
+<div x-show="false" style="display:none;">
+    <!-- Existing premium panel code -->
+</div>
+
+<!-- OR add a notice -->
+<div class="glass p-6 text-center">
+    <div class="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+        <i class="fas fa-tools text-3xl text-amber-400"></i>
+    </div>
+    <h3 class="text-2xl font-bold text-white mb-2">Premium System Under Maintenance</h3>
+    <p class="text-slate-400">We're working on improving our payment system. Premium features will be available soon!</p>
+    <p class="text-xs text-slate-500 mt-4">For inquiries, join our support server: <a href="https://discord.gg/YxeeaEg9V6" class="text-indigo-400 hover:underline">discord.gg/YxeeaEg9V6</a></p>
+</div>
             }
         }
     </script>
