@@ -1,23 +1,13 @@
 import aiosqlite
-import os
 
 DB_PATH = "mature_bot.db"
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
-        # Economy Table
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS economy (
-                user_id INTEGER, guild_id INTEGER, balance INTEGER DEFAULT 0, 
-                xp INTEGER DEFAULT 0, level INTEGER DEFAULT 1, 
-                PRIMARY KEY (user_id, guild_id)
-            )
-        """)
-        
         # Premium Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS premium (
-                guild_id INTEGER PRIMARY KEY, 
+                guild_id INTEGER PRIMARY KEY,
                 tier TEXT DEFAULT 'none',
                 duration TEXT DEFAULT 'monthly',
                 expires_at TEXT
@@ -27,7 +17,7 @@ async def init_db():
         # No-Prefix Users Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS no_prefix_users (
-                guild_id INTEGER, user_id INTEGER, 
+                guild_id INTEGER, user_id INTEGER,
                 PRIMARY KEY (guild_id, user_id)
             )
         """)
@@ -35,12 +25,12 @@ async def init_db():
         # Antinuke Settings Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS antinuke_settings (
-                guild_id INTEGER, program TEXT, enabled BOOLEAN DEFAULT 0, 
+                guild_id INTEGER, program TEXT, enabled BOOLEAN DEFAULT 0,
                 PRIMARY KEY (guild_id, program)
             )
         """)
         
-        # Premium Codes Table (NEW)
+        # Premium Codes Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS premium_codes (
                 code TEXT PRIMARY KEY,
@@ -54,7 +44,7 @@ async def init_db():
             )
         """)
         
-        # Payments Table (NEW)
+        # Payments Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id TEXT PRIMARY KEY,
@@ -65,6 +55,121 @@ async def init_db():
                 status TEXT DEFAULT 'pending',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 completed_at TEXT
+            )
+        """)
+        
+        # Marriages Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS marriages (
+                user1_id INTEGER,
+                user2_id INTEGER,
+                married_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user1_id, user2_id)
+            )
+        """)
+        
+        # Warns Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS warns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                user_id INTEGER,
+                moderator_id INTEGER,
+                reason TEXT,
+                warned_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Warn Config Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS warn_config (
+                guild_id INTEGER PRIMARY KEY,
+                threshold INTEGER DEFAULT 3,
+                punishment_type TEXT DEFAULT 'timeout',
+                punishment_duration TEXT DEFAULT '1h'
+            )
+        """)
+        
+        # User Warns Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_warns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER,
+                user_id INTEGER,
+                moderator_id INTEGER,
+                reason TEXT,
+                warned_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Saved Embeds Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS saved_embeds (
+                guild_id INTEGER,
+                name TEXT,
+                data TEXT,
+                PRIMARY KEY (guild_id, name)
+            )
+        """)
+        
+        # Relationships Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS relationships (
+                user1_id INTEGER,
+                user2_id INTEGER,
+                relationship_type TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user1_id, user2_id, relationship_type)
+            )
+        """)
+        
+        # Pending Relationships Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS pending_relationships (
+                requester_id INTEGER,
+                target_id INTEGER,
+                relationship_type TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (requester_id, target_id, relationship_type)
+            )
+        """)
+        
+        # Vanity Protection Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS vanity_protection (
+                guild_id INTEGER PRIMARY KEY,
+                vanity_code TEXT NOT NULL,
+                protected_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Custom Commands Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS custom_commands (
+                guild_id INTEGER,
+                name TEXT,
+                response TEXT,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, name)
+            )
+        """)
+        
+        # Payment Requests Table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS payment_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                guild_id INTEGER,
+                tier TEXT,
+                duration TEXT,
+                amount INTEGER,
+                reference_id TEXT UNIQUE,
+                status TEXT DEFAULT 'pending',
+                payment_method TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                verified_at TEXT,
+                verified_by INTEGER
             )
         """)
         
@@ -96,7 +201,6 @@ async def remove_no_prefix_user(guild_id, user_id):
         await db.commit()
         return True
 
-# Premium Code Functions
 async def create_premium_code(code, tier, duration, days, user_id=None):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
